@@ -12,6 +12,7 @@ import android.view.View;
 
 import org.robolectric.annotation.AccessibilityChecks;
 
+import java.io.PrintStream;
 import java.lang.reflect.Method;
 import java.util.LinkedList;
 import java.util.List;
@@ -27,10 +28,8 @@ public class AccessibilityUtil {
    * Check a {@code View} for accessibility. Only performs checks if 
    * accessibility is enabled using an {@link AccessibilityChecks} annotation
    * or the environment variable {@code a11y_checks_enabled} is set to 
-   * {@code true}. Warnings may be treated as errors if the environment variable
-   * {@code a11y_warnings_as_errors} is set to {@code true}. 
-   * {@link AccessibilityChecks} values override those from environment 
-   * variables.
+   * {@code true}. {@link AccessibilityChecks} values override those from 
+   * environment variables.
    * 
    * @param view The {@code View} to examine
    * @return {@code false} if accessibility checks are enabled and a problem
@@ -38,16 +37,11 @@ public class AccessibilityUtil {
    */
   public static boolean passesAccessibilityChecksIfEnabled(View view) {
     boolean checksEnabled = false;
-    boolean warningsAsErrors = false;
 
     /* Pull defaults from environment variables */
-    String checksEnabledString = System.getenv("a11y_checks_enabled");
+    String checksEnabledString = System.getenv("robolectric.accessibility.enablechecks");
     if (checksEnabledString != null) {
       checksEnabled = checksEnabledString.equals("true");
-    }
-    String warningsAsErrorsString = System.getenv("a11y_warnings_as_errors");
-    if (warningsAsErrorsString != null) {
-      warningsAsErrors = warningsAsErrorsString.equals("true");
     }
 
     /* Update values from annotations in the stack, if any */
@@ -66,7 +60,6 @@ public class AccessibilityUtil {
         }
         if (classChecksAnnotation != null) {
           checksEnabled = classChecksAnnotation.enabled();
-          warningsAsErrors = classChecksAnnotation.treatWarningsAsErors();
           break;
         }
         /* If we've crawled up the stack far enough to find the test, stop looking */
@@ -88,7 +81,7 @@ public class AccessibilityUtil {
       return true;
     }
     
-    return passesAccessibilityChecks(view, warningsAsErrors);
+    return passesAccessibilityChecks(view, System.out);
   }
 
   /**
@@ -96,13 +89,12 @@ public class AccessibilityUtil {
    * found to System.out.
    *
    * @param view The {@code View} to examine
-   * @param warningsAsErrors Set to {@code true} to treat warnings found
-   * the same as errors.
+   * @param printStream A stream to print error messages to
    * @return {@code false} if accessibility checks are enabled and a problem
    * was found. {@code true} otherwise.
    */
   public static boolean passesAccessibilityChecks(View view,
-      boolean warningsAsErrors) {
+      PrintStream printStream) {
     /* 
      * For the initial release, it's fine to ignore the forRobolectricVersion 
      * because there is only one version. These sets need to be adjusted in 
@@ -127,14 +119,11 @@ public class AccessibilityUtil {
     // Throw an exception for the first error
     List<AccessibilityViewCheckResult> errors = AccessibilityCheckResultUtils.getResultsForType(
             results, AccessibilityCheckResultType.ERROR);
-    if (warningsAsErrors) {
-      errors.addAll(AccessibilityCheckResultUtils.getResultsForType(
-            results, AccessibilityCheckResultType.WARNING));
+    if (printStream != null) {
+        for (AccessibilityViewCheckResult error : errors) {
+          printStream.println("Accessibility Issue: " + error.getMessage().toString());
+      }
     }
-    for (AccessibilityViewCheckResult error : errors) {
-      System.out.println("Accessibility Issue: " + error.getMessage().toString());
-    }
-
     return (errors.size() == 0);
   }
 }
